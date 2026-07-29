@@ -1,0 +1,75 @@
+import random
+def bit_stuffing(bit_stream):
+    stuffed_stream = ""
+    count_ones = 0
+    for bit in bit_stream:
+        stuffed_stream += bit
+        if bit == '1':
+            count_ones += 1
+            if count_ones == 5:
+                stuffed_stream += '0'
+                count_ones = 0
+        else:
+            count_ones = 0
+    return stuffed_stream
+def introduction_error(bit_stream, error_type):
+    if error_type == 'none' or not bit_stream:
+        return bit_stream
+    bit_list = list(bit_stream)
+    stream_length = len(bit_list)
+    if error_type == 'single':
+        error_index = random.randint(0, stream_length - 1)
+        bit_list[error_index] = '1' if bit_list[error_index] == '0' else '0'
+        print(f"[Channel] Introduced single bit error at index {error_index}")
+    elif error_type == 'multiple':
+        num_errors = random.randint(2, max(2, stream_length // 2))
+        error_indices = random.sample(range(stream_length), num_errors)
+        for idx in error_indices:
+            bit_list[idx] = '1' if bit_list[idx] == '0' else '0'
+        print(f"[Channel] Introduced multiple bit errors at indices: {sorted(error_indices)}")
+    return "".join(bit_list)
+def bit_destuffing(stuffed_stream):
+    destuffed_stream = ""
+    count_ones = 0
+    i = 0
+    n = len(stuffed_stream)
+    protocol_error = False
+    while i < n:
+        bit = stuffed_stream[i]
+        destuffed_stream += bit
+        if bit == '1':
+            count_ones += 1
+            if count_ones == 5:
+                if i + 1 < n:
+                    if stuffed_stream[i + 1] == '0':
+                        i += 1 
+                    else:
+                        protocol_error = True
+                else:
+                    protocol_error = True
+                count_ones = 0
+        else:
+            count_ones = 0
+        i += 1
+    return destuffed_stream, protocol_error
+def simulate_transmission(original_stream, error_mode):
+    print(f"\n--- Simulation Mode: {error_mode.upper()} ERROR ---")
+    print(f"Original Stream : {original_stream}")
+    stuffed = bit_stuffing(original_stream)
+    print(f"Stuffed Frame   : {stuffed}")
+    transmitted = introduction_error(stuffed, error_mode)
+    if error_mode != 'none':
+        print(f"Received Frame  : {transmitted}")
+    destuffed, format_error = bit_destuffing(transmitted)
+    print(f"Destuffed Stream: {destuffed}")
+    if format_error:
+        print("Integrity Check : FAILED (Framing/Protocol Violation Detected)")
+    elif destuffed == original_stream:
+        print("Integrity Check : PASSED (Data matches original perfectly)")
+    else:
+        print("Integrity Check : FAILED (Data corruption bypassed framing rules)")
+if __name__ == "__main__":
+    input_data = "111111011111001111111" 
+    simulate_transmission(input_data, 'none')
+    simulate_transmission(input_data, 'single')
+    simulate_transmission(input_data, 'multiple')
