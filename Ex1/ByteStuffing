@@ -1,0 +1,129 @@
+#include <stdio.h>
+#include <string.h>
+
+#define START_END_BORDER "01111110"
+#define ESCAPE_SEQUENCE "01111101"
+
+char raw_bits[100][9];
+char transmitted_stream[300][9];
+char recovered_bits[100][9];
+
+void convertCharToBin(char character, char stream[]) {
+    int bit_index;
+    for(bit_index = 7; bit_index >= 0; bit_index--) {
+        stream[7 - bit_index] = ((character >> bit_index) & 1) + '0';
+    }
+    stream[8] = '\0';
+}
+
+char convertBinToChar(char stream[]) {
+    int bit_index, decimal_sum = 0;
+    for(bit_index = 0; bit_index < 8; bit_index++) {
+        decimal_sum = decimal_sum * 2 + (stream[bit_index] - '0');
+    }
+    return (char)decimal_sum;
+}
+
+int main() {
+    char user_input[100], output_text[100];
+    int idx, total_elements = 0, extracted_count = 0, input_length;
+    int errorDetected = 0;
+
+    printf("Enter the input text: ");
+    if (scanf("%s", user_input) != 1) return 0;
+
+    input_length = strlen(user_input);
+    printf("\nConversion of Character to Binary\n");
+    for(idx = 0; idx < input_length; idx++) {
+        convertCharToBin(user_input[idx], raw_bits[idx]);
+        printf("[%c] represents bits: %s\n", user_input[idx], raw_bits[idx]);
+    }
+
+    // Assemble the frame
+    strcpy(transmitted_stream[total_elements++], START_END_BORDER);
+    for(idx = 0; idx < input_length; idx++) {
+        if(strcmp(raw_bits[idx], START_END_BORDER) == 0 || strcmp(raw_bits[idx], ESCAPE_SEQUENCE) == 0) {
+            strcpy(transmitted_stream[total_elements++], ESCAPE_SEQUENCE);
+        }
+        strcpy(transmitted_stream[total_elements++], raw_bits[idx]);
+    }
+    strcpy(transmitted_stream[total_elements++], START_END_BORDER);
+
+    printf("\nStuffed Bitstream Frame\n");
+    for(idx = 0; idx < total_elements; idx++) {
+        printf("%s ", transmitted_stream[idx]);
+    }
+    printf("\n");
+
+    // --- 1-BIT ERROR INJECTION STEP ---
+    printf("\n=== ERROR INJECTION ===\n");
+    int target_byte, target_bit;
+    printf("Enter byte block index to corrupt (0 to %d, or -1 for no error): ", total_elements - 1);
+    if (scanf("%d", &target_byte) == 1 && target_byte >= 0 && target_byte < total_elements) {
+        printf("Enter bit position to flip (0 to 7): ");
+        if (scanf("%d", &target_bit) == 1 && target_bit >= 0 && target_bit < 8) {
+            // Flip char character bit ('0' <-> '1') using an inline conditional statement
+            transmitted_stream[target_byte][target_bit] = (transmitted_stream[target_byte][target_bit] == '0') ? '1' : '0';
+            printf("  -> Altered bit %d inside byte index %d!\n", target_bit, target_byte);
+
+            printf("Corrupted Bitstream Frame:\n");
+            for(idx = 0; idx < total_elements; idx++) {
+                printf("%s ", transmitted_stream[idx]);
+            }
+            printf("\n");
+        }
+    } else {
+        printf("  -> Processing without introducing any errors.\n");
+    }
+
+    printf("\n=== DECODING PROCESS ===\n");
+
+    // Verify outer frame boundary flags first before checking inner contents
+    if (strcmp(transmitted_stream[0], START_END_BORDER) != 0 || strcmp(transmitted_stream[total_elements - 1], START_END_BORDER) != 0) {
+        errorDetected = 1;
+    }
+
+    printf("De-stuffed Bitstream\n");
+    for(idx = 1; idx < total_elements - 1; idx++) {
+        if(strcmp(transmitted_stream[idx], ESCAPE_SEQUENCE) == 0) {
+            idx++; // Move directly to target payload byte following escape signal
+            // If the escape character was the last item before the closing flag, it is an formatting rule violation
+            if (idx >= total_elements - 1) {
+                errorDetected = 1;
+                break;
+            }
+        }
+
+        strcpy(recovered_bits[extracted_count], transmitted_stream[idx]);
+        printf("%s ", recovered_bits[extracted_count]);
+        extracted_count++;
+    }
+    printf("\n");
+
+    // --- ARRAYS VALUE INTEGRITY VALIDATION ---
+    if (!errorDetected) {
+        if (extracted_count != input_length) {
+            errorDetected = 1; // Number of output characters mismatched
+        } else {
+            for(idx = 0; idx < input_length; idx++) {
+                if (strcmp(recovered_bits[idx], raw_bits[idx]) != 0) {
+                    errorDetected = 1; // Bit alignment content mismatch discovered
+                    break;
+                }
+            }
+        }
+    }
+
+    printf("\n=== FINAL OUTPUT ===\n");
+    if (errorDetected) {
+        printf("Result          : ERROR DETECTED! Frame contents or framing layout was corrupted.\n");
+    } else {
+        for(idx = 0; idx < extracted_count; idx++) {
+            output_text[idx] = convertBinToChar(recovered_bits[idx]);
+        }
+        output_text[extracted_count] = '\0';
+        printf("Result          : SUCCESS! Data transmission completed cleanly.\n");
+        printf("Restored Text   : %s\n", output_text);
+    }
+    return 0;
+}
